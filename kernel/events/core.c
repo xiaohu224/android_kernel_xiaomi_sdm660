@@ -1753,9 +1753,6 @@ static int __perf_event_read_size(u64 read_format, int nr_siblings)
 	if (read_format & PERF_FORMAT_ID)
 		entry += sizeof(u64);
 
-	if (read_format & PERF_FORMAT_LOST)
-		entry += sizeof(u64);
-
 	if (read_format & PERF_FORMAT_GROUP) {
 		nr += nr_siblings;
 		size += sizeof(u64);
@@ -1853,6 +1850,7 @@ static void perf_event__id_header_size(struct perf_event *event)
 static bool perf_event_validate_size(struct perf_event *event)
 {
 	struct perf_event *sibling, *group_leader = event->group_leader;
+<<<<<<< HEAD
 
 	if (__perf_event_read_size(event->attr.read_format,
 				   group_leader->nr_siblings + 1) > 16*1024)
@@ -1871,6 +1869,22 @@ static bool perf_event_validate_size(struct perf_event *event)
 	 */
 	if (event == group_leader)
 		return true;
+
+	for_each_sibling_event(sibling, group_leader) {
+		if (__perf_event_read_size(sibling->attr.read_format,
+					   group_leader->nr_siblings + 1) > 16*1024)
+			return false;
+	}
+=======
+
+	if (__perf_event_read_size(event->attr.read_format,
+				   group_leader->nr_siblings + 1) > 16*1024)
+		return false;
+>>>>>>> 45df1db3d36925ff29b9945bba2d7d918e5bd548
+
+	if (__perf_event_read_size(group_leader->attr.read_format,
+				   group_leader->nr_siblings + 1) > 16*1024)
+		return false;
 
 	for_each_sibling_event(sibling, group_leader) {
 		if (__perf_event_read_size(sibling->attr.read_format,
@@ -10946,12 +10960,12 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
 
-	/* Do we allow access to perf_event_open(2) ? */
-	err = security_perf_event_open(&attr, PERF_SECURITY_OPEN);
+	err = perf_copy_attr(attr_uptr, &attr);
 	if (err)
 		return err;
 
-	err = perf_copy_attr(attr_uptr, &attr);
+	/* Do we allow access to perf_event_open(2) ? */
+	err = security_perf_event_open(&attr, PERF_SECURITY_OPEN);
 	if (err)
 		return err;
 
