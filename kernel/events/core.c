@@ -1850,7 +1850,6 @@ static void perf_event__id_header_size(struct perf_event *event)
 static bool perf_event_validate_size(struct perf_event *event)
 {
 	struct perf_event *sibling, *group_leader = event->group_leader;
-<<<<<<< HEAD
 
 	if (__perf_event_read_size(event->attr.read_format,
 				   group_leader->nr_siblings + 1) > 16*1024)
@@ -1875,12 +1874,6 @@ static bool perf_event_validate_size(struct perf_event *event)
 					   group_leader->nr_siblings + 1) > 16*1024)
 			return false;
 	}
-=======
-
-	if (__perf_event_read_size(event->attr.read_format,
-				   group_leader->nr_siblings + 1) > 16*1024)
-		return false;
->>>>>>> 45df1db3d36925ff29b9945bba2d7d918e5bd548
 
 	if (__perf_event_read_size(group_leader->attr.read_format,
 				   group_leader->nr_siblings + 1) > 16*1024)
@@ -6424,8 +6417,15 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 {
 	struct perf_event *leader = event->group_leader, *sub;
 	u64 read_format = event->attr.read_format;
-	u64 values[6];
+	unsigned long flags;
+	u64 values[5];
 	int n = 0;
+
+	/*
+	 * Disabling interrupts avoids all counter scheduling
+	 * (context switches, timer based rotation and IPIs).
+	 */
+	local_irq_save(flags);
 
 	values[n++] = 1 + leader->nr_siblings;
 
@@ -6462,6 +6462,8 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 
 		__output_copy(handle, values, n * sizeof(u64));
 	}
+
+	local_irq_restore(flags);
 }
 
 #define PERF_FORMAT_TOTAL_TIMES (PERF_FORMAT_TOTAL_TIME_ENABLED|\
