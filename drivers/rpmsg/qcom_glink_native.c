@@ -637,9 +637,7 @@ static void qcom_glink_rx_done_work(struct kthread_work *work)
 		list_del(&intent->node);
 		spin_unlock_irqrestore(&channel->intent_lock, flags);
 
-		cmd.id = reuse ? GLINK_CMD_RX_DONE_W_REUSE : GLINK_CMD_RX_DONE;
-		cmd.lcid = cid;
-		cmd.liid = iid;
+		__qcom_glink_rx_done(glink, channel, intent, true);
 
 		spin_lock_irqsave(&channel->intent_lock, flags);
 	}
