@@ -170,6 +170,8 @@ struct qcom_glink {
 	bool sent_read_notify;
 };
 
+	void *ilc;
+
 enum {
 	GLINK_STATE_CLOSED,
 	GLINK_STATE_OPENING,
