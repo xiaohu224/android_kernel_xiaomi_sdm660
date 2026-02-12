@@ -496,10 +496,10 @@ static void msm_restart_prepare(const char *cmd)
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 	
 	qpnp_pon_set_restart_reason(
-+           PON_RESTART_REASON_RECOVERY);
-+        __raw_writel(0x77665502, restart_reason);
-+	flush_cache_all();
-+	return;
+            PON_RESTART_REASON_RECOVERY);
+         __raw_writel(0x77665502, restart_reason);
+ 	flush_cache_all();
+ 	return;
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
