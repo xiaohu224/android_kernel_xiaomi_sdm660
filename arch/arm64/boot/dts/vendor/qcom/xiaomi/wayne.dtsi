@@ -26,8 +26,8 @@
 			system {
 				compatible = "android,system";
 				dev = "/dev/block/platform/soc/c0c4000.sdhci/by-name/system";
-				type = "ext4";
-				mnt_flags = "ro,barrier=1";
+				type = "erofs";
+				mnt_flags = "ro";
 				fsmgr_flags = "wait";
 				status = "ok";
 			};
