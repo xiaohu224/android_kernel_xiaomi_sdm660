@@ -232,7 +232,7 @@ struct msm_jpegdma_buf_handle {
 	int fd;
 	struct msm_jpegdma_device *dma;
 	unsigned long size;
-	dma_addr_t addr;
+	ion_phys_addr_t addr;
 };
 
 /*

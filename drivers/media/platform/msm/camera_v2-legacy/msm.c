@@ -168,8 +168,7 @@ typedef int (*msm_queue_find_func)(void *d1, void *d2);
 
 static void msm_init_queue(struct msm_queue_head *qhead)
 {
-	if (WARN_ON(!qhead))
-		return;
+	BUG_ON(!qhead);
 
 	INIT_LIST_HEAD(&qhead->list);
 	spin_lock_init(&qhead->lock);
@@ -893,15 +892,13 @@ static unsigned int msm_poll(struct file *f,
 	int rc = 0;
 	struct v4l2_fh *eventq = f->private_data;
 
-	if (WARN_ON(!eventq))
-		goto err;
+	BUG_ON(!eventq);
 
 	poll_wait(f, &eventq->wait, pll_table);
 
 	if (v4l2_event_pending(eventq))
 		rc = POLLIN | POLLRDNORM;
 
-err:
 	return rc;
 }
 
@@ -1081,12 +1078,10 @@ static inline void msm_list_switch(struct list_head *l1,
 
 static int msm_open(struct file *filep)
 {
-	int rc = -1;
+	int rc;
 	unsigned long flags;
 	struct msm_video_device *pvdev = video_drvdata(filep);
-
-	if (WARN_ON(!pvdev))
-		return rc;
+	BUG_ON(!pvdev);
 
 	/* !!! only ONE open is allowed !!! */
 	if (atomic_cmpxchg(&pvdev->opened, 0, 1))
@@ -1257,11 +1252,8 @@ static void msm_sd_notify(struct v4l2_subdev *sd,
 	int rc = 0;
 	struct v4l2_subdev *subdev = NULL;
 
-	if (WARN_ON(!sd))
-		return;
-
-	if (WARN_ON(!arg))
-		return;
+	BUG_ON(!sd);
+	BUG_ON(!arg);
 
 	/* Check if subdev exists before processing*/
 	if (!msm_sd_find(sd->name))
@@ -1352,7 +1344,6 @@ static int msm_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto mdev_fail;
 	}
-	media_device_init(msm_v4l2_dev->mdev);
 	strlcpy(msm_v4l2_dev->mdev->model, MSM_CONFIGURATION_NAME,
 			sizeof(msm_v4l2_dev->mdev->model));
 	msm_v4l2_dev->mdev->dev = &(pdev->dev);
@@ -1361,10 +1352,11 @@ static int msm_probe(struct platform_device *pdev)
 	if (WARN_ON(rc < 0))
 		goto media_fail;
 
-	if (WARN_ON((rc == media_entity_pads_init(&pvdev->vdev->entity,
-			0, NULL)) < 0))
+	if (WARN_ON((rc == media_entity_init(&pvdev->vdev->entity,
+			0, NULL, 0)) < 0))
 		goto entity_fail;
 
+	pvdev->vdev->entity.type = MEDIA_ENT_T_DEVNODE_V4L;
 	pvdev->vdev->entity.group_id = QCAMERA_VNODE_GROUP_ID;
 #endif
 

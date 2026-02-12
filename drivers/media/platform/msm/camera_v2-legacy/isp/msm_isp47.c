@@ -12,8 +12,6 @@
 
 #include <linux/module.h>
 #include <linux/ratelimit.h>
-#include <linux/clk.h>
-#include <linux/sched/clock.h>
 
 
 #include "msm_isp_util.h"
@@ -144,10 +142,8 @@ static struct msm_bus_paths msm_isp_bus_client_config[] = {
 
 static struct msm_bus_scale_pdata msm_isp_bus_client_pdata = {
 	msm_isp_bus_client_config,
-	NULL,
 	ARRAY_SIZE(msm_isp_bus_client_config),
 	.name = "msm_camera_isp",
-	0
 };
 
 uint32_t msm_vfe47_ub_reg_offset(struct vfe_device *vfe_dev, int wm_idx)

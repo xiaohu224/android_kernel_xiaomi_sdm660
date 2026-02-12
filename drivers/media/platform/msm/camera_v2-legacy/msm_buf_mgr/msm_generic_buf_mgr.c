@@ -273,25 +273,17 @@ static void msm_buf_mngr_contq_listdel(struct msm_buf_mngr_device *dev,
 				     uint32_t session, int32_t stream,
 				     bool unmap, uint32_t cnt)
 {
-	int rc;
 	struct msm_buf_mngr_user_buf_cont_info *cont_bufs, *cont_save;
 
-	list_for_each_entry_safe_reverse(cont_bufs,
+	list_for_each_entry_safe(cont_bufs,
 		cont_save, &dev->cont_qhead, entry) {
 		if ((cont_bufs->sessid == session) &&
 		(cont_bufs->strid == stream)) {
-			if (cnt && unmap) {
-				/* dma_buf_vunmap ignored vaddr(2nd argument) */
-				dma_buf_vunmap(cont_bufs->dmabuf,
-					cont_bufs->paddr);
-				rc = dma_buf_end_cpu_access(cont_bufs->dmabuf,
-					DMA_BIDIRECTIONAL);
-				if (rc) {
-					pr_err("Failed in end cpu access, dmabuf=%pK\n",
-						cont_bufs->dmabuf);
-					return;
-				}
-				dma_buf_put(cont_bufs->dmabuf);
+			if (cnt == 1 && unmap == 1) {
+				ion_unmap_kernel(dev->ion_client,
+					cont_bufs->ion_handle);
+				ion_free(dev->ion_client,
+					cont_bufs->ion_handle);
 			}
 			list_del_init(&cont_bufs->entry);
 			kfree(cont_bufs);
@@ -324,10 +316,8 @@ static void msm_buf_mngr_sd_shutdown(struct msm_buf_mngr_device *dev,
 	unsigned long flags;
 	struct msm_get_bufs *bufs, *save;
 
-	if (WARN_ON(!dev))
-		return;
-	if (WARN_ON(!session))
-		return;
+	BUG_ON(!dev);
+	BUG_ON(!session);
 
 	spin_lock_irqsave(&dev->buf_q_spinlock, flags);
 	if (!list_empty(&dev->buf_qhead)) {
@@ -355,7 +345,7 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 					*cont_cmd)
 {
 	int rc = 0, i = 0;
-	struct dma_buf *dmabuf = NULL;
+	struct ion_handle *ion_handle = NULL;
 	struct msm_camera_user_buf_cont_t *iaddr, *temp_addr;
 	struct msm_buf_mngr_user_buf_cont_info *new_entry, *bufs, *save;
 	size_t size;
@@ -386,14 +376,20 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 				}
 			}
 		}
-		dmabuf = dma_buf_get(cont_cmd->cont_fd);
-		if (IS_ERR_OR_NULL(dmabuf)) {
-			pr_err("Failed to get dmabuf for fd %d\n",
+		ion_handle = ion_import_dma_buf(dev->ion_client,
+				cont_cmd->cont_fd);
+		if (IS_ERR_OR_NULL(ion_handle)) {
+			pr_err("Failed to create ion handle for fd %d\n",
 				cont_cmd->cont_fd);
 			rc = -EINVAL;
 			goto end;
 		}
-		size = dmabuf->size;
+		if (ion_handle_get_size(dev->ion_client,
+			ion_handle, &size) < 0) {
+			pr_err("Get ion size failed\n");
+			rc = -EINVAL;
+			goto free_ion_handle;
+		}
 		if ((size == 0) || (size <
 			(sizeof(struct msm_camera_user_buf_cont_t) *
 			cont_cmd->cnt))) {
@@ -401,21 +397,9 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 			rc = -EINVAL;
 			goto free_ion_handle;
 		}
-		/* iaddr = ion_map_kernel(dev->ion_client, ion_handle);
-		 *if (IS_ERR_OR_NULL(iaddr)) {
-		 *	pr_err("Mapping cont buff failed\n");
-		 *	rc = -EINVAL;
-		 *	goto free_ion_handle;
-		 *}
-		 */
-		rc = dma_buf_begin_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
-		if (rc) {
-			pr_err("dma begin access failed rc=%d\n", rc);
-			return rc;
-		}
-		iaddr = dma_buf_vmap(dmabuf);
+		iaddr = ion_map_kernel(dev->ion_client, ion_handle);
 		if (IS_ERR_OR_NULL(iaddr)) {
-			pr_err("dma_buf_vmap failed\n");
+			pr_err("Mapping cont buff failed\n");
 			rc = -EINVAL;
 			goto free_ion_handle;
 		}
@@ -441,7 +425,7 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 			new_entry->strid = cont_cmd->stream_id;
 			new_entry->index = i;
 			new_entry->main_fd = cont_cmd->cont_fd;
-			new_entry->dmabuf = dmabuf;
+			new_entry->ion_handle = ion_handle;
 			new_entry->cnt = cont_cmd->cnt;
 			new_entry->paddr = temp_addr;
 			list_add_tail(&new_entry->entry, &dev->cont_qhead);
@@ -466,16 +450,9 @@ free_list:
 				cont_cmd->stream_id, 0, i);
 		}
 	}
-	// ion_unmap_kernel(dev->ion_client, ion_handle);
-	dma_buf_vunmap(dmabuf, iaddr);
-	rc = dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
-	if (rc) {
-		pr_err("Failed in end cpu access, dmabuf=%pK\n", dmabuf);
-		return rc;
-	}
+	ion_unmap_kernel(dev->ion_client, ion_handle);
 free_ion_handle:
-	// ion_free(dev->ion_client, ion_handle);
-	dma_buf_put(dmabuf);
+	ion_free(dev->ion_client, ion_handle);
 end:
 	mutex_unlock(&dev->cont_mutex);
 	return rc;
@@ -907,7 +884,8 @@ static int32_t __init msm_buf_mngr_init(void)
 	msm_buf_mngr_dev->subdev.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	v4l2_set_subdevdata(&msm_buf_mngr_dev->subdev.sd, msm_buf_mngr_dev);
 
-	media_entity_pads_init(&msm_buf_mngr_dev->subdev.sd.entity, 0, NULL);
+	media_entity_init(&msm_buf_mngr_dev->subdev.sd.entity, 0, NULL, 0);
+	msm_buf_mngr_dev->subdev.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
 	msm_buf_mngr_dev->subdev.sd.entity.group_id =
 		MSM_CAMERA_SUBDEV_BUF_MNGR;
 	msm_buf_mngr_dev->subdev.sd.internal_ops =
@@ -929,6 +907,12 @@ static int32_t __init msm_buf_mngr_init(void)
 
 	mutex_init(&msm_buf_mngr_dev->cont_mutex);
 	INIT_LIST_HEAD(&msm_buf_mngr_dev->cont_qhead);
+	msm_buf_mngr_dev->ion_client =
+		msm_ion_client_create("msm_cam_generic_buf_mgr");
+	if (!msm_buf_mngr_dev->ion_client) {
+		pr_err("%s: Failed to create ion client\n", __func__);
+		rc = -EBADFD;
+	}
 
 end:
 	return rc;
